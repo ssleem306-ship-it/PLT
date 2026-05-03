@@ -98,7 +98,7 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
         run: |
           cd main_repo
-          python evaluate.py decrypted.csv ../private_data/emoCK.csv
+          python evaluate.py decrypted.csv ../private_data/plt.csv
 
       # 10. Generate leaderboard HTML
       - name: Generate leaderboard
