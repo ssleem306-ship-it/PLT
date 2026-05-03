@@ -6,8 +6,7 @@ import os
 # =========================
 # CONFIGURATION
 # =========================
-# Choose ranking metric: "Accuracy" or "F1-Score"
-metric = "Accuracy"   # change to "F1-Score" if needed
+metric = "Accuracy"   # or "F1-Score"
 
 # =========================
 # Arguments
@@ -20,10 +19,9 @@ submission_csv = sys.argv[1]
 labels_csv = sys.argv[2]
 
 # =========================
-# Get team name (GitHub username)
+# GitHub username
 # =========================
 github_user = os.environ.get("GITHUB_ACTOR")
-
 if github_user is None:
     print("Error: GITHUB_ACTOR not found.")
     sys.exit(1)
@@ -37,19 +35,67 @@ submission = pd.read_csv(submission_csv)
 labels = pd.read_csv(labels_csv)
 
 # =========================
-# Merge and evaluate
+# Normalize columns
 # =========================
 labels = labels.rename(columns={"label": "true_label"})
 submission = submission.rename(columns={"label": "pred_label"})
 
-merged = pd.merge(labels, submission, on="id")
+# Normalize IDs (VERY IMPORTANT)
+labels["id"] = labels["id"].astype(str).str.strip()
+submission["id"] = submission["id"].astype(str).str.strip()
 
-y_true = merged["true_label"]
-y_pred = merged["pred_label"]
+# =========================
+# Set index for alignment
+# =========================
+labels = labels.set_index("id")
+submission = submission.set_index("id")
+
+# =========================
+# Mismatch diagnostics
+# =========================
+missing_in_submission = labels.index.difference(submission.index)
+extra_in_submission = submission.index.difference(labels.index)
+
+print("========== DATA CHECK ==========")
+print(f"Total ground truth: {len(labels)}")
+print(f"Total predictions: {len(submission)}")
+print(f"Missing predictions: {len(missing_in_submission)}")
+print(f"Extra predictions: {len(extra_in_submission)}")
+
+if len(missing_in_submission) > 0:
+    print("Example missing IDs:", list(missing_in_submission)[:5])
+
+if len(extra_in_submission) > 0:
+    print("Example extra IDs:", list(extra_in_submission)[:5])
+
+# =========================
+# Align submission to labels
+# =========================
+submission = submission.reindex(labels.index)
+
+# =========================
+# Handle missing predictions
+# =========================
+if submission["pred_label"].isna().any():
+    print("⚠️ Missing predictions detected")
+
+    # OPTION 1: STRICT (recommended)
+    # print("❌ Submission rejected: missing predictions")
+    # sys.exit(1)
+
+    # OPTION 2: Penalize (used here)
+    submission["pred_label"] = submission["pred_label"].fillna(-1)
+
+# =========================
+# Final evaluation (FULL dataset)
+# =========================
+y_true = labels["true_label"]
+y_pred = submission["pred_label"]
 
 accuracy = round(accuracy_score(y_true, y_pred) * 100, 2)
 f1 = round(f1_score(y_true, y_pred, average="macro") * 100, 2)
 
+print("\n========== RESULTS ==========")
 print(f"Accuracy for {team_name}: {accuracy:.2f}%")
 print(f"F1 Score for {team_name}: {f1:.2f}%")
 
@@ -70,7 +116,7 @@ new_entry = {
 if os.path.exists(leaderboard_file):
     leaderboard = pd.read_csv(leaderboard_file)
 
-    # 🔒 STRICT: only one submission allowed
+    # 🔒 Only one submission allowed
     if team_name in leaderboard['Team'].values:
         print(f"User '{team_name}' already submitted. Only first submission allowed.")
         sys.exit(1)
@@ -83,10 +129,10 @@ else:
 leaderboard = pd.concat([leaderboard, pd.DataFrame([new_entry])], ignore_index=True)
 
 # =========================
-# Sort by selected metric
+# Sort leaderboard
 # =========================
 if metric not in leaderboard.columns:
-    print(f"Error: Metric '{metric}' not found in leaderboard columns.")
+    print(f"Error: Metric '{metric}' not found.")
     sys.exit(1)
 
 leaderboard = leaderboard.sort_values(by=metric, ascending=False)
