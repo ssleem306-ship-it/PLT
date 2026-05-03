@@ -114,7 +114,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add final_leaderboard.csv final_leaderboard.html
+          git add final_leaderboard.csv index.html
 
           if ! git diff --cached --quiet; then
             git commit -m "Update leaderboard PR #${{ github.event.pull_request.number }}"
